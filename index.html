@@ -1,34 +1,47 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Link Shortener Admin</title>
-</head>
-<body>
-    <h1>Add New Link</h1>
-    <form id="addLinkForm">
-        <input type="text" id="fullUrl" placeholder="Full URL" required>
-        <input type="text" id="description" placeholder="Description" required>
-        <button type="submit">Add Link</button>
-    </form>
-    <div id="result"></div>
+   <html lang="en">
+   <head>
+       <meta charset="UTF-8">
+       <meta name="viewport" content="width=device-width, initial-scale=1.0">
+       <title>Link Shortener Admin</title>
+   </head>
+   <body>
+       <h1>Add New Link</h1>
+       <form id="addLinkForm">
+           <input type="text" id="fullUrl" placeholder="Full URL" required>
+           <input type="text" id="description" placeholder="Description" required>
+           <button type="submit">Add Link</button>
+       </form>
+       <div id="result"></div>
 
-    <script>
-        document.getElementById('addLinkForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const fullUrl = document.getElementById('fullUrl').value;
-            const description = document.getElementById('description').value;
-            
-            const response = await fetch('/api/addLink', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fullUrl, description })
-            });
-            
-            const result = await response.json();
-            document.getElementById('result').textContent = `Short Link: ${result.shortLink}`;
-        });
-    </script>
-</body>
-</html>
+       <script>
+           document.getElementById('addLinkForm').addEventListener('submit', async (e) => {
+               e.preventDefault();
+               const fullUrl = document.getElementById('fullUrl').value;
+               const description = document.getElementById('description').value;
+               const resultDiv = document.getElementById('result');
+               
+               try {
+                   console.log('Submitting form with:', { fullUrl, description });
+                   const response = await fetch('/api/addLink', {
+                       method: 'POST',
+                       headers: { 'Content-Type': 'application/json' },
+                       body: JSON.stringify({ fullUrl, description })
+                   });
+                   
+                   if (!response.ok) {
+                       throw new Error(`HTTP error! status: ${response.status}`);
+                   }
+                   
+                   const result = await response.json();
+                   console.log('Received response:', result);
+                   resultDiv.textContent = `Short Link: ${result.shortLink}`;
+               } catch (error) {
+                   console.error('Error:', error);
+                   resultDiv.textContent = `Error: ${error.message}`;
+               }
+           });
+       </script>
+   </body>
+   </html>
+   
