@@ -4,72 +4,120 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Link Shortener</title>
-    <style>
-        /* ... (keep your existing styles) ... */
-    </style>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
-<body>
-    <h1>Link Shortener</h1>
-    <form id="linkForm">
-        <input type="url" id="fullUrl" placeholder="Enter full URL" required>
-        <input type="text" id="description" placeholder="Enter description" required>
-        <button type="submit">Shorten Link</button>
-    </form>
-    <div id="result"></div>
-    <h2>All Links</h2>
-    <div id="linksError" style="color: red;"></div>
-    <table id="linksTable">
-        <thead>
-            <tr>
-                <th>Short Link</th>
-                <th>Full URL</th>
-                <th>Description</th>
-            </tr>
-        </thead>
-        <tbody>
-            <!-- Links will be added here dynamically -->
-        </tbody>
-    </table>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto p-6">
+        <h1 class="text-4xl font-bold mb-6">Link Shortener</h1>
+        <form id="linkForm" class="mb-8">
+            <input type="url" id="fullUrl" placeholder="Enter full URL" required class="w-full p-2 mb-2 border rounded">
+            <input type="text" id="description" placeholder="Enter description" required class="w-full p-2 mb-2 border rounded">
+            <button type="submit" class="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Shorten Link</button>
+        </form>
+        <div id="result" class="mb-4 text-green-600"></div>
+        
+        <h2 class="text-2xl font-bold mb-4">All Links</h2>
+        <input type="text" id="searchInput" placeholder="Search links..." class="w-full p-2 mb-4 border rounded">
+        <div id="linksError" class="text-red-500 mb-4"></div>
+        <table id="linksTable" class="w-full mb-4">
+            <thead>
+                <tr class="bg-gray-200">
+                    <th class="p-2 text-left">Short Link</th>
+                    <th class="p-2 text-left">Full URL</th>
+                    <th class="p-2 text-left">Description</th>
+                    <th class="p-2 text-left">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Links will be added here dynamically -->
+            </tbody>
+        </table>
+        <div id="pagination" class="flex justify-center space-x-2"></div>
+    </div>
 
     <script>
     const API_URL = 'https://link-shortener-worker.pauliestevens.workers.dev/api';
+    let currentPage = 1;
+    let totalPages = 1;
+    let allLinks = [];
 
     async function addLink(fullUrl, description) {
-        // ... (keep existing code)
+        const response = await fetch(`${API_URL}/addLink`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fullUrl, description })
+        });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return response.json();
     }
 
-    async function getAllLinks() {
-        try {
-            console.log('Fetching all links...');
-            const response = await fetch(`${API_URL}/getAllLinks`);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const text = await response.text();
-            console.log('Raw response:', text);
-            const data = JSON.parse(text);
-            console.log('Parsed data:', data);
-            if (!data.links || !Array.isArray(data.links)) {
-                console.error('Unexpected data structure:', data);
-                throw new Error('Unexpected data structure received from server');
-            }
-            return data.links;
-        } catch (error) {
-            console.error('Error fetching links:', error);
-            throw error;
-        }
+    async function getAllLinks(page = 1) {
+        const response = await fetch(`${API_URL}/getAllLinks?page=${page}`);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return response.json();
+    }
+
+    async function deleteLink(shortCode) {
+        const response = await fetch(`${API_URL}/deleteLink`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shortCode })
+        });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return response.json();
     }
 
     function displayLinks(links) {
-        console.log('Displaying links:', links);
         const tbody = document.querySelector('#linksTable tbody');
         tbody.innerHTML = '';
         links.forEach(link => {
             const row = tbody.insertRow();
-            row.insertCell(0).textContent = link.shortLink;
+            row.insertCell(0).innerHTML = `<a href="${link.shortLink}" target="_blank" class="text-blue-500 hover:underline">${link.shortLink}</a>`;
             row.insertCell(1).textContent = link.fullUrl;
             row.insertCell(2).textContent = link.description;
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = 'Delete';
+            deleteButton.className = 'bg-red-500 text-white p-1 rounded hover:bg-red-600';
+            deleteButton.onclick = () => handleDelete(link.shortCode);
+            row.insertCell(3).appendChild(deleteButton);
         });
+    }
+
+    function displayPagination() {
+        const paginationDiv = document.getElementById('pagination');
+        paginationDiv.innerHTML = '';
+        for (let i = 1; i <= totalPages; i++) {
+            const button = document.createElement('button');
+            button.textContent = i;
+            button.className = `px-3 py-1 rounded ${currentPage === i ? 'bg-blue-500 text-white' : 'bg-gray-200'}`;
+            button.onclick = () => loadAndDisplayLinks(i);
+            paginationDiv.appendChild(button);
+        }
+    }
+
+    async function loadAndDisplayLinks(page = 1) {
+        try {
+            const data = await getAllLinks(page);
+            allLinks = data.links;
+            displayLinks(allLinks);
+            currentPage = data.currentPage;
+            totalPages = data.totalPages;
+            displayPagination();
+            document.getElementById('linksError').textContent = '';
+        } catch (error) {
+            console.error('Error loading links:', error);
+            document.getElementById('linksError').textContent = `Error loading links: ${error.message}`;
+        }
+    }
+
+    async function handleDelete(shortCode) {
+        try {
+            await deleteLink(shortCode);
+            await loadAndDisplayLinks(currentPage);
+        } catch (error) {
+            console.error('Error deleting link:', error);
+            alert(`Failed to delete link: ${error.message}`);
+        }
     }
 
     document.getElementById('linkForm').addEventListener('submit', async (e) => {
@@ -79,24 +127,22 @@
         try {
             const result = await addLink(fullUrl, description);
             document.getElementById('result').textContent = `Short link created: ${result.shortLink}`;
-            
-            // Refresh the links table
+            document.getElementById('fullUrl').value = '';
+            document.getElementById('description').value = '';
             await loadAndDisplayLinks();
         } catch (error) {
             document.getElementById('result').textContent = `Error: ${error.message}`;
         }
     });
 
-    async function loadAndDisplayLinks() {
-        try {
-            const links = await getAllLinks();
-            displayLinks(links);
-            document.getElementById('linksError').textContent = '';
-        } catch (error) {
-            console.error('Error loading links:', error);
-            document.getElementById('linksError').textContent = `Error loading links: ${error.message}`;
-        }
-    }
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+        const searchTerm = e.target.value.toLowerCase();
+        const filteredLinks = allLinks.filter(link => 
+            link.fullUrl.toLowerCase().includes(searchTerm) || 
+            link.description.toLowerCase().includes(searchTerm)
+        );
+        displayLinks(filteredLinks);
+    });
 
     // Initial load of links
     loadAndDisplayLinks();
