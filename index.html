@@ -1,47 +1,87 @@
-<!DOCTYPE html>
-   <html lang="en">
-   <head>
-       <meta charset="UTF-8">
-       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-       <title>Link Shortener Admin</title>
-   </head>
-   <body>
-       <h1>Add New Link</h1>
-       <form id="addLinkForm">
-           <input type="text" id="fullUrl" placeholder="Full URL" required>
-           <input type="text" id="description" placeholder="Description" required>
-           <button type="submit">Add Link</button>
-       </form>
-       <div id="result"></div>
+addEventListener('fetch', event => {
+  event.respondWith(handleRequest(event.request))
+})
 
-       <script>
-           document.getElementById('addLinkForm').addEventListener('submit', async (e) => {
-               e.preventDefault();
-               const fullUrl = document.getElementById('fullUrl').value;
-               const description = document.getElementById('description').value;
-               const resultDiv = document.getElementById('result');
-               
-               try {
-                   console.log('Submitting form with:', { fullUrl, description });
-                   const response = await fetch('/api/addLink', {
-                       method: 'POST',
-                       headers: { 'Content-Type': 'application/json' },
-                       body: JSON.stringify({ fullUrl, description })
-                   });
-                   
-                   if (!response.ok) {
-                       throw new Error(`HTTP error! status: ${response.status}`);
-                   }
-                   
-                   const result = await response.json();
-                   console.log('Received response:', result);
-                   resultDiv.textContent = `Short Link: ${result.shortLink}`;
-               } catch (error) {
-                   console.error('Error:', error);
-                   resultDiv.textContent = `Error: ${error.message}`;
-               }
-           });
-       </script>
-   </body>
-   </html>
-   
+async function handleRequest(request) {
+  const url = new URL(request.url)
+  const path = url.pathname
+
+  console.log(`Handling request for path: ${path}`)
+
+  if (path === '/api/addLink') {
+    if (request.method === 'POST') {
+      return handleAddLink(request)
+    } else {
+      return new Response('Method Not Allowed', { status: 405 })
+    }
+  } else if (path === '/api/getAllLinks') {
+    return handleGetAllLinks()
+  }
+
+  // Check if the path is a short link and redirect
+  if (path !== '/') {
+    const shortCode = path.slice(1)
+    const linkData = await LINKS.get(shortCode)
+    if (linkData) {
+      const { fullUrl } = JSON.parse(linkData)
+      return Response.redirect(fullUrl, 301)
+    }
+  }
+
+  // For all other requests, return a 404
+  return new Response('Not Found', { status: 404 })
+}
+
+async function handleAddLink(request) {
+  try {
+    const { fullUrl, description } = await request.json()
+    console.log(`Received request to add link: ${fullUrl}, ${description}`)
+    const shortCode = generateShortCode()
+    await LINKS.put(shortCode, JSON.stringify({ fullUrl, description }))
+    const shortLink = `https://${new URL(request.url).hostname}/${shortCode}`
+    return new Response(JSON.stringify({ shortLink }), {
+      headers: { 'Content-Type': 'application/json' }
+    })
+  } catch (error) {
+    console.error('Error processing /api/addLink:', error)
+    return new Response(JSON.stringify({ error: 'Failed to process request', details: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+}
+
+async function handleGetAllLinks() {
+  try {
+    const links = []
+    let listComplete = false
+    let cursor = undefined
+    while (!listComplete) {
+      const { keys, list_complete, cursor: newCursor } = await LINKS.list({ cursor })
+      for (const key of keys) {
+        const value = await LINKS.get(key.name)
+        const { fullUrl, description } = JSON.parse(value)
+        links.push({
+          shortLink: `https://${new URL(request.url).hostname}/${key.name}`,
+          fullUrl,
+          description
+        })
+      }
+      listComplete = list_complete
+      cursor = newCursor
+    }
+    return new Response(JSON.stringify(links), {
+      headers: { 'Content-Type': 'application/json' }
+    })
+  } catch (error) {
+    console.error('Error processing /api/getAllLinks:', error)
+    return new Response(JSON.stringify({ error: 'Failed to retrieve links', details: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+}
+
+function generateShortCode() {
+  return Math.random().toString(36).substring(2, 8)
+}
