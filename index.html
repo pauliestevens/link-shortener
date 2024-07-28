@@ -1,87 +1,85 @@
-addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event.request))
-})
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Link Shortener</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        form { margin-bottom: 20px; }
+        input, button { margin: 5px 0; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h1>Link Shortener</h1>
+    <form id="linkForm">
+        <input type="url" id="fullUrl" placeholder="Enter full URL" required>
+        <input type="text" id="description" placeholder="Enter description" required>
+        <button type="submit">Shorten Link</button>
+    </form>
+    <div id="result"></div>
+    <h2>All Links</h2>
+    <table id="linksTable">
+        <thead>
+            <tr>
+                <th>Short Link</th>
+                <th>Full URL</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Links will be added here dynamically -->
+        </tbody>
+    </table>
 
-async function handleRequest(request) {
-  const url = new URL(request.url)
-  const path = url.pathname
+    <script>
+    const API_URL = 'https://link-shortener-worker.pauliestevens.workers.dev/api';
 
-  console.log(`Handling request for path: ${path}`)
-
-  if (path === '/api/addLink') {
-    if (request.method === 'POST') {
-      return handleAddLink(request)
-    } else {
-      return new Response('Method Not Allowed', { status: 405 })
+    async function addLink(fullUrl, description) {
+        const response = await fetch(`${API_URL}/addLink`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fullUrl, description })
+        });
+        return response.json();
     }
-  } else if (path === '/api/getAllLinks') {
-    return handleGetAllLinks()
-  }
 
-  // Check if the path is a short link and redirect
-  if (path !== '/') {
-    const shortCode = path.slice(1)
-    const linkData = await LINKS.get(shortCode)
-    if (linkData) {
-      const { fullUrl } = JSON.parse(linkData)
-      return Response.redirect(fullUrl, 301)
+    async function getAllLinks() {
+        const response = await fetch(`${API_URL}/getAllLinks`);
+        return response.json();
     }
-  }
 
-  // For all other requests, return a 404
-  return new Response('Not Found', { status: 404 })
-}
-
-async function handleAddLink(request) {
-  try {
-    const { fullUrl, description } = await request.json()
-    console.log(`Received request to add link: ${fullUrl}, ${description}`)
-    const shortCode = generateShortCode()
-    await LINKS.put(shortCode, JSON.stringify({ fullUrl, description }))
-    const shortLink = `https://${new URL(request.url).hostname}/${shortCode}`
-    return new Response(JSON.stringify({ shortLink }), {
-      headers: { 'Content-Type': 'application/json' }
-    })
-  } catch (error) {
-    console.error('Error processing /api/addLink:', error)
-    return new Response(JSON.stringify({ error: 'Failed to process request', details: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    })
-  }
-}
-
-async function handleGetAllLinks() {
-  try {
-    const links = []
-    let listComplete = false
-    let cursor = undefined
-    while (!listComplete) {
-      const { keys, list_complete, cursor: newCursor } = await LINKS.list({ cursor })
-      for (const key of keys) {
-        const value = await LINKS.get(key.name)
-        const { fullUrl, description } = JSON.parse(value)
-        links.push({
-          shortLink: `https://${new URL(request.url).hostname}/${key.name}`,
-          fullUrl,
-          description
-        })
-      }
-      listComplete = list_complete
-      cursor = newCursor
+    function displayLinks(links) {
+        const tbody = document.querySelector('#linksTable tbody');
+        tbody.innerHTML = '';
+        links.forEach(link => {
+            const row = tbody.insertRow();
+            row.insertCell(0).textContent = link.shortLink;
+            row.insertCell(1).textContent = link.fullUrl;
+            row.insertCell(2).textContent = link.description;
+        });
     }
-    return new Response(JSON.stringify(links), {
-      headers: { 'Content-Type': 'application/json' }
-    })
-  } catch (error) {
-    console.error('Error processing /api/getAllLinks:', error)
-    return new Response(JSON.stringify({ error: 'Failed to retrieve links', details: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    })
-  }
-}
 
-function generateShortCode() {
-  return Math.random().toString(36).substring(2, 8)
-}
+    document.getElementById('linkForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fullUrl = document.getElementById('fullUrl').value;
+        const description = document.getElementById('description').value;
+        const result = await addLink(fullUrl, description);
+        document.getElementById('result').textContent = `Short link created: ${result.shortLink}`;
+        
+        // Refresh the links table
+        const links = await getAllLinks();
+        displayLinks(links);
+    });
+
+    // Initial load of links
+    (async () => {
+        const links = await getAllLinks();
+        displayLinks(links);
+    })();
+    </script>
+</body>
+</html>
