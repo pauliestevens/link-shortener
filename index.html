@@ -17,6 +17,7 @@
     </form>
     <div id="result"></div>
     <h2>All Links</h2>
+    <div id="linksError" style="color: red;"></div>
     <table id="linksTable">
         <thead>
             <tr>
@@ -34,20 +35,7 @@
     const API_URL = 'https://link-shortener-worker.pauliestevens.workers.dev/api';
 
     async function addLink(fullUrl, description) {
-        try {
-            const response = await fetch(`${API_URL}/addLink`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fullUrl, description })
-            });
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        } catch (error) {
-            console.error('Error adding link:', error);
-            throw error;
-        }
+        // ... (keep existing code)
     }
 
     async function getAllLinks() {
@@ -57,12 +45,18 @@
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            const data = await response.json();
-            console.log('Received data:', data);
-            return data.links || [];
+            const text = await response.text();
+            console.log('Raw response:', text);
+            const data = JSON.parse(text);
+            console.log('Parsed data:', data);
+            if (!data.links || !Array.isArray(data.links)) {
+                console.error('Unexpected data structure:', data);
+                throw new Error('Unexpected data structure received from server');
+            }
+            return data.links;
         } catch (error) {
             console.error('Error fetching links:', error);
-            return [];
+            throw error;
         }
     }
 
@@ -70,16 +64,12 @@
         console.log('Displaying links:', links);
         const tbody = document.querySelector('#linksTable tbody');
         tbody.innerHTML = '';
-        if (Array.isArray(links)) {
-            links.forEach(link => {
-                const row = tbody.insertRow();
-                row.insertCell(0).textContent = link.shortLink;
-                row.insertCell(1).textContent = link.fullUrl;
-                row.insertCell(2).textContent = link.description;
-            });
-        } else {
-            console.error('Links is not an array:', links);
-        }
+        links.forEach(link => {
+            const row = tbody.insertRow();
+            row.insertCell(0).textContent = link.shortLink;
+            row.insertCell(1).textContent = link.fullUrl;
+            row.insertCell(2).textContent = link.description;
+        });
     }
 
     document.getElementById('linkForm').addEventListener('submit', async (e) => {
@@ -91,22 +81,25 @@
             document.getElementById('result').textContent = `Short link created: ${result.shortLink}`;
             
             // Refresh the links table
-            const links = await getAllLinks();
-            displayLinks(links);
+            await loadAndDisplayLinks();
         } catch (error) {
             document.getElementById('result').textContent = `Error: ${error.message}`;
         }
     });
 
-    // Initial load of links
-    (async () => {
+    async function loadAndDisplayLinks() {
         try {
             const links = await getAllLinks();
             displayLinks(links);
+            document.getElementById('linksError').textContent = '';
         } catch (error) {
-            console.error('Error loading initial links:', error);
+            console.error('Error loading links:', error);
+            document.getElementById('linksError').textContent = `Error loading links: ${error.message}`;
         }
-    })();
+    }
+
+    // Initial load of links
+    loadAndDisplayLinks();
     </script>
 </body>
 </html>
